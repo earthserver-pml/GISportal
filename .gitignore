@@ -8,3 +8,5 @@ html/GISPortal.js
 html/css/GISPortal.css
 middleware/portalflask/settings.py
 config/*
+.DS_Store
+apache_log

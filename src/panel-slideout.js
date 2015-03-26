@@ -19,6 +19,10 @@ gisportal.panelSlideout.initDOM = function(  ){
 			var slideoutName = findRelatedSlideoutName( this );
 			gisportal.panelSlideout.openSlideout( slideoutName );
 		})
+		.on( 'click', '.js-slideout-toggle-peak', function(){
+			var slideoutName = findRelatedSlideoutName( this );
+			gisportal.panelSlideout.togglePeak( slideoutName );
+		})
 		.on( 'click', '.js-slideout-close', function(){
 			var slideoutName = findRelatedSlideoutName( this );
 			gisportal.panelSlideout.closeSlideout( slideoutName );
@@ -27,34 +31,59 @@ gisportal.panelSlideout.initDOM = function(  ){
 			var slideoutName = findRelatedSlideoutName( this );
 			gisportal.panelSlideout.peakSlideout( slideoutName );
 		});
+};
 
-
-}
 function findRelatedSlideoutName( slideoutName ){
 
 	var slideout = $('[data-slideout-name="' + slideoutName + '"]');
 
-	if( slideout.length == 0 )
+	if( slideout.length === 0 )
 		throw new Error("Could not find panel related to that button");
 	else
 		return slideout;
 }
 
-
+gisportal.panelSlideout.isOut = function( slideoutName ){
+	var slideout = findRelatedSlideoutName( slideoutName );
+	return slideout.hasClass('show-all');
+};
 
 gisportal.panelSlideout.openSlideout = function( slideoutName ){
 	var slideout = findRelatedSlideoutName( slideoutName );
+	gisportal.panelSlideout.hideAllPanels();
 	slideout.addClass( 'show-all' ).removeClass( 'show-peak' );
-}
+};
 
 
 gisportal.panelSlideout.closeSlideout = function( slideoutName ){
+	console.log('inside closeout');
 	var slideout = findRelatedSlideoutName( slideoutName );
 	slideout.removeClass( 'show-all show-peak' );
-}
+};
 
 
 gisportal.panelSlideout.peakSlideout = function( slideoutName ){
 	var slideout = findRelatedSlideoutName( slideoutName );
 	slideout.addClass( 'show-peak' ).removeClass( 'show-all' );
+};
+
+gisportal.panelSlideout.togglePeak = function( slideoutName ){
+	var slideout = findRelatedSlideoutName( slideoutName );
+
+	if( slideout.hasClass( 'show-all' ) )
+		slideout.addClass( 'show-peak' ).removeClass( 'show-all' );
+	else
+		slideout.removeClass( 'show-peak' ).addClass( 'show-all' );
+};
+
+
+gisportal.panelSlideout.hideAllPanels = function(){
+	$('.panel-slideout.show-all').each(function(){
+		var newState = $(this).data('slideout-override-action');
+		$(this).removeClass('show-all');
+		if( newState == 'peak' )
+			$(this).addClass( 'show-peak' );
+	});
+
+	
 }

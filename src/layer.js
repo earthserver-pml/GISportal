@@ -18,30 +18,17 @@
  * @param {string} title - The display title
  * @param {string} productAbstract - The description of the layer
  * @param {string} type - opLayers or refLayers
- * @param {object} opts - Options to extend the defaults
+ *
+ * 
+ * @param {object} options - Options to extend the defaults
  */
-gisportal.layer = function(name, title, productAbstract, type, opts) {
+ //gisportal.layer = function(name, title, productAbstract, type, opts) {
+gisportal.layer = function( options ) {
    var layer = this;
-      
-   this.id = name;      
-   this.origName = name.replace("/","-");
-   this.name = name.replace("/","-");
-   this.urlName = name;
-   this.displayTitle = title.replace(/_/g, " ");
-   this.title = title;  
-   this.productAbstract = productAbstract;
-   this.type = type;
-   
-   this.visibleTab = "details";
-   
-   // These queues feel like a hack, refactor?
-   this.metadataComplete = false;
-   this.metadataQueue = [];
 
-   this.defaults = {
+   var defaults = {
       firstDate : '',
       lastDate : '',
-      scalebarOpen : null,
       serverName : null,
       wfsURL : null,
       wmsURL : null,
@@ -54,12 +41,44 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
       tags : null,
       options : null,
 
-      contactDetails: {},
-      offsetVectors: null
-   };
-   
-   $.extend(true, this, this.defaults, opts);
+      provider: {},
+      offsetVectors: null,
 
+      autoScale: gisportal.config.autoScale
+   };
+
+   $.extend(true, this, defaults, options);
+
+
+   // id used to identify the layer internally 
+   this.id = options.name.replace(/[^a-zA-Z0-9]/g, '_' ).replace(/_+/g, '_' ) + "__" + options.providerTag;
+
+   // The grouped name of the indicator (eg Oxygen)
+   this.name = options.tags.niceName || options.name.replace("/","-");
+
+   // {indicator name} - {indicator region} - { indicator provider }
+   this.descriptiveName = this.name + ' - ' + this.tags.region + ' - ' + this.providerTag
+
+   // The original indicator name used by thedds/cache
+   this.urlName = options.name;
+   this.displayTitle = options.title.replace(/_/g, " ");
+
+   // The title as given by threads, not reliable 
+   this.title = options.title;
+
+
+   this.productAbstract = options.productAbstract;
+   this.type = options.type;
+
+   // Default indicator tab to show
+   this.visibleTab = "details";
+   
+   // These queues feel like a hack, refactor?
+   this.metadataComplete = false;
+   this.metadataQueue = [];
+
+   
+   //this.moreInfo = opts.moreInfo;
    // Used for sensor data from SOS, not tested as we have no sensor data
    this.sensorName = this.sensorName !== null ? this.sensorName.replace(/\s+/g, "") : null;
    this.sensorName = this.sensorName !== null ? this.sensorName.replace(/[\.,]+/g, "") : null;
@@ -68,27 +87,10 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
       this.urlName = this.urlName.replace('-', ':');
    }
    
-   if (typeof this.tags !== 'undefined' && this.tags !== null) {
-      for(var tag in this.tags) {
-         if(tag === 'niceName') {
-            this.name = this.tags.niceName;
-            this.tags.niceName = null;
-         } else if(tag === 'niceTitle') {
-            this.displayTitle = this.tags.niceTitle;
-            this.tags.niceTitle = null;  
-         }
-         else  {
-            if (this.tags[tag] instanceof Object)  {
-               this.tags[tag] = _.map(this.tags[tag], function(d) { return d.toLowerCase(); });
-            } 
-            else  {
-               this.tags[tag] = this.tags[tag].toLowerCase();
-            }
-         }
-      }
-   }
 
    this.tags['providerTag'] = this.providerTag;
+
+   this.provider = gisportal.providers[ this.providerTag ]
 
    // I do not like the metadataQueue but it is used to
    // prevent race conditions of AJAX calls such as
@@ -148,8 +150,7 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
    this.elevationCache = [];
    //--------------------------------------------------------------------------
    
-   this.WFSDatesToIDs = {};
-   
+
    
    /**
     * When data is available, initialise the layer
@@ -210,9 +211,7 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
             layer.temporal = true;
             var datetimes = dimension.Value.split(',');           
             layer.DTCache = datetimes;
-            //layer.firstDate = gisportal.utils.displayDateString(datetimes[0]);
-            //layer.lastDate = gisportal.utils.displayDateString(datetimes[datetimes.length - 1]);
-         
+
          // Elevation dimension   
          } else if (value.Name.toLowerCase() == 'elevation') {
             layer.elevation = true;
@@ -237,6 +236,7 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
     */
    this.mergeNewParams = function(object) {
       if (this.openlayers['anID']) this.openlayers['anID'].mergeNewParams(object);
+      gisportal.scalebars.autoScale( this.id );
    };
    
    /**
@@ -255,7 +255,7 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
     * Set the opacity of the layer.
     * @param {double} opacityValue - 0 is transparent, 1 is opaque.
     */
-   this.opacity = null;
+   this.opacity = 1;
    this.setOpacity = function(opacityValue) {
       var self = this;
       
@@ -309,7 +309,8 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
                  
          // Update map date cache now a new temporal layer has been added
          gisportal.refreshDateCache();
-         $('#viewDate').datepicker("option", "defaultDate", new Date('dd-mm-yy', layer.lastDate));
+         
+         $('#viewDate').datepicker("option", "defaultDate", endDate);
 
          gisportal.zoomOverall();
       } else {
@@ -387,13 +388,13 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
          if(matchedDate) {
             layer.currentDateTimes = matchedDate;
             // Choose 1st date in the matched date-times for the moment - will expand functionality later
-            layer.selectedDateTime = matchedDate[0];            
+            layer.selectedDateTime = matchedDate[0];
             
             //----------------------- TODO: Temp code -------------------------
             var keys = Object.keys(layer.openlayers);
             for(var i = 0, len = keys.length; i < len; i++) {
                if(layer.type == 'opLayers') {
-                  layer.openlayers[keys[i]].mergeNewParams({time: layer.selectedDateTime});
+                  layer.mergeNewParams({time: layer.selectedDateTime});
                } else {
                   if($.isFunction(layer.openlayers[keys[i]].removeAllFeatures)) {
                      layer.openlayers[keys[i]].removeAllFeatures();
@@ -438,7 +439,7 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
             if (layer.minScaleVal === null) layer.minScaleVal = layer.origMinScaleVal;
             if (layer.maxScaleVal === null) layer.maxScaleVal = layer.origMaxScaleVal;
             layer.units = data.units; 
-            layer.log = data.log == 'true' ? true : false;
+            layer.log = data.logScaling == true ? true : false;
 
             gisportal.layers[layer.id].metadataComplete = true; 
             layer.metadataComplete = true;
@@ -463,6 +464,10 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
          }
       });
    };
+
+   this.cacheUrl = function(){
+     return portalLocation() + 'cache/layers/' + layer.serverName + '_' + layer.urlName.replace("/","-") + '.json'
+   }
 
    /**
     * This function creates an Open Layers layer, such as a WMS Layer.
@@ -565,8 +570,6 @@ gisportal.layer = function(name, title, productAbstract, type, opts) {
                }
                self.DTCache = times;
                self.WFSDatesToIDs = dateToIDLookup;
-               //layer.firstDate = gisportal.utils.displayDateString(datetimes[0].startdate);
-               //layer.lastDate = gisportal.utils.displayDateString(datetimes[datetimes.length - 1].startdate);
             }
          }
       }
@@ -660,6 +663,7 @@ gisportal.addLayer = function(layer, options) {
    }
   
    layer.setVisibility(options.visible); 
+   gisportal.setCountryBordersToTopLayer();
 };
 
 /**
@@ -730,6 +734,7 @@ gisportal.filterLayersByDate = function(date) {
 gisportal.getLayerData = function(fileName, layer, options) {  
   var options = options || {};
   var id = layer.id; 
+
    $.ajax({
       type: 'GET',
       url: "./cache/layers/" + fileName,
@@ -739,9 +744,6 @@ gisportal.getLayerData = function(fileName, layer, options) {
       success: function(data) {
          // Initialises the layer with the data from the AJAX call
          gisportal.layers[id].init(data, options);
-
-         // Track the indicator change
-         gisportal.analytics.events.layerChange( layer )
       },
       error: function(request, errorType, exception) {
          var data = {

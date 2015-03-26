@@ -1,46 +1,60 @@
 /*------------------------------------*\
-    Configuration
-    This file is for the configuration
-    of the GIS Portal.
+   Configuration
+   This file is for the configuration
+   of the GIS Portal.
 
-    browseCategories - Used to define
-    which categories to be shown in the
-    browse panel. This is currently
-    limited to 2.
+   browseCategories - Used to define
+   which categories to be shown in the
+   browse panel. This is currently
+   limited to 2.
 \*------------------------------------*/
+
 
 
 gisportal.config = {
    siteMode: "development", //(development|production)
+
+    // Skip start screen only is the user has a saved state, requires T&C
+   autoResumeSavedState: false,
+   
+   // Always skip the welcome page, also skips T&C
+   skipWelcomePage: false,
+
+   // Do we require terms and conditions agreement to use the portal
+   requiresTermsAndCondictions: true,
+
    browseCategories : {
       "Ecosystem_Element" : "Ecosystem",
       "region": "Region",
-      "MSFD" : "EU MSFD"
+      "MSFD" : "EU MSFD Descriptor"
    },
-   popularIndicators : [
-      "Heterotrophic flagellates biomass", "Net Primary Production", "Oxygen", "Temperature"
+   paths: {
+    graphServer: 'http://localhost:3000/',
+    middlewarePath: '/service'
+   },
+   countryBorder : {
+      'defaultLayer' : 'countries_all_white',      // (countries_all_white|countries_all_black|countries_all_blue)
+      'alwaysVisible' : false                      // (true|false)  > If true the defaultLayer will be visible at page load
+   },
+   defaultBaseMap: 'EOX',
+
+   // Should layers auto scale by default
+   autoScale: true,
+
+
+   homepageSlides: [
+      "img/homepage-slides/opec1.jpg",
+      "img/homepage-slides/opec2.jpg",
+      "img/homepage-slides/opec3.jpg",
+      "img/homepage-slides/opec4.jpg",
+      "img/homepage-slides/opec5.jpg",
+      "img/homepage-slides/opec6.jpg",
+      "img/homepage-slides/opec7.jpg"
    ],
-   defaultStates: [
-      {
-         "name" : "Cod in the North East Atlantic",
-         "url" : "http://portaldev.marineopec.eu/?state=b8czastdcoioi",
-         "icon" : "icon_map"
-      },
-      {
-         "name" : "Seasonal Changes in Chlorophyll levels in the Med",
-         "url" : "http://portaldev.marineopec.eu/?state=a9bmsjjtthehe",
-         "icon" : "icon_analyse"
-      },
-      {
-         "name" : "Interannual Nitrogen in the Baltic",
-         "url" : "http://portaldev.marineopec.eu/?state=c7ebs12wvvmvm",
-         "icon" : "icon_analyse"
-      },
-      {
-         "name" : "Summer zooplankton growth in the Black Sea",
-         "url" : "http://portaldev.marineopec.eu/?state=bqua1n6lk2yky",
-         "icon" : "icon_map"
-     }
-   ],
+
+   // Deny access to older browsers
+   // none=Allow, advisory=Tell them only, strict=Stop them
+   browserRestristion: "strict" //(none|advisory|strict)
+
 };
 

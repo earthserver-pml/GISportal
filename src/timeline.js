@@ -63,6 +63,13 @@ gisportal.TimeLine = function(id, options) {
       console.error('No DIV with ID, "' + id + '" exists. Cannot render TimeLine.');
       return;
    }
+
+    $('.js-current-date').pikaday({
+      format: "YYYY-MM-DD",
+      onSelect: function(){
+         self.setDate( this.getDate() );
+      }
+    });
    
    //--------------------------------------------------------------------------
    
@@ -247,7 +254,9 @@ gisportal.TimeLine.prototype.redraw = function() {
    var self = this;  // Useful for when the scope/meaning of "this" changes
    
    // Recalculate the x and y scales before redraw
-    this.xScale.range([0, this.width]);
+   // 
+   this.reWidth();
+    this.xScale.range([0, this.width ]);
    //this.xScale.domain([self.minDate, self.maxDate]).range([0, this.width]);
    this.yScale.domain([0, this.timebars.length]).range([0, this.height]);
    // Scale the chart and main drawing areas
@@ -281,6 +290,7 @@ gisportal.TimeLine.prototype.redraw = function() {
    //--------------------------------------------------------------------------
    // Draw the time bars
    // Note: Had to use closures to move variables from each into the .attr etc.
+   
    this.bars = this.barArea.selectAll('rect').data(this.timebars);
    this.bars
       .enter().append('svg:rect')
@@ -297,7 +307,6 @@ gisportal.TimeLine.prototype.redraw = function() {
       
    // Time bar removal
    this.bars.exit().remove();
-   
    // Re-scale the x values and widths of ALL the time bars
    this.bars
       .attr('x', function(d) { 
@@ -314,29 +323,43 @@ gisportal.TimeLine.prototype.redraw = function() {
             return 0; 
          } 
       });
+   
       
    //--------------------------------------------------------------------------
    
-   // Position the date time detail lines (if available) for each time bar
-   this.dateDetails = this.dateDetailArea.selectAll('g').data(this.timebars);
-
-   this.dateDetails.enter().append('svg:g')
-      .each(function(d1, i1) {
+   function updateLines(d1, i1) {
          if(d1.type == 'layer')  {
             // Time Bar
-            d3.select(this).selectAll('g').data(d1.dateTimes)  // <-- second level data-join
-              .enter().append('svg:line')
+            var takenSpaces = {};
+            var dateTimes = d1.dateTimes.filter(function( dateStr ){
+               var x = d3.round(self.xScale(new Date(dateStr)) + 0.5);
+               if( takenSpaces[x] === true )
+                  return false;
+               takenSpaces[x] = true;
+               return (0 < x && x < self.width);
+            });
+
+            var g = d3.select(this).selectAll('line').data(dateTimes, function(d) { return(d); });  // <-- second level data-join
+             g.enter().append('svg:line')
                .attr('stroke', '#59476D')
                .attr('y1', function() { return d3.round(self.yScale(i1) + self.barMargin + 1.5); })
                .attr('y2', function() { return d3.round(self.yScale(i1) + self.laneHeight - self.barMargin + 0.5); })
                .attr('class', 'detailLine');
+            g.exit()
+              .remove();
          }
-      });
-      
-   //--------------------------------------------------------------------------
+      }
+   // Position the date time detail lines (if available) for each time bar
+   this.dateDetails = this.dateDetailArea.selectAll('g').data(this.timebars);
+
+   // Add new required g elements
+   this.dateDetails.enter().append('svg:g')
    
-   // Date detail removal at time bar level
+   // Remove unneeded g elements
    this.dateDetails.exit().remove(); 
+
+   // Update all elements!
+   this.dateDetailArea.selectAll('g').attr('d', updateLines);
    
    // Re-scale the x values for all the detail lines for each time bar
    this.main.selectAll('.detailLine')
@@ -370,7 +393,7 @@ gisportal.TimeLine.prototype.reHeight = function() {
 // Re-calculate the dynamic widget width
 gisportal.TimeLine.prototype.reWidth = function() {
    this.chartWidth = $('div#' + this.id).width();
-   this.width = this.chartWidth - this.margin.right - this.margin.left;
+   this.width = (this.chartWidth - this.margin.right - this.margin.left) ;
 };
 
 // Reset the timeline to its original data extents
@@ -379,9 +402,12 @@ gisportal.TimeLine.prototype.reset = function() {
    this.reHeight();
    this.reWidth();
    this.redraw();
+   this.updatePickerBounds();
 };
 
 gisportal.TimeLine.prototype.drawLabels = function()  {
+
+   
    // Draw the time bar labels
    $('.js-timeline-labels').html('');
    for (var i = 0; i < this.timebars.length; i++)  {
@@ -413,27 +439,8 @@ gisportal.TimeLine.prototype.zoomDate = function(startDate, endDate){
    this.maxDate = ((maxDate instanceof Date) ? new Date(maxDate.getTime() + padding) : this.maxDate);
    console.log(minDate, maxDate);
    console.log(this.xScale.domain());
-   this.xScale.domain([this.minDate, this.maxDate]).range([0, this.width]);
+   this.xScale.domain([this.minDate * 0.9, this.maxDate * 1.1]).range([0, this.width]);
    this.zoom.x(this.xScale); // This is absolutely required to programatically zoom and retrigger internals of zoom
-   this.redraw();
-};
-
-// Show the timebar
-gisportal.TimeLine.prototype.hide = function() {
-   $('div#' + this.id).animate({bottom: '-' + ($('div#timeline').height() - 2) + 'px'});
-   $('div#' + this.id + ' .togglePanel').button( "option", "icons", { primary: 'ui-icon-triangle-1-n'} );
-};
-
-// Hide the timebar
-gisportal.TimeLine.prototype.show = function() {
-   $('div#' + this.id).animate({bottom: 0 });
-   $('div#' + this.id + ' .togglePanel').button( "option", "icons", { primary: 'ui-icon-triangle-1-s'} );
-};
-
-// Add a new time bar to the chart in JSON timeBar notation
-gisportal.TimeLine.prototype.addTimeBarJSON = function(timeBar) {
-   this.timebars.push(timeBar);
-   this.reHeight();
    this.redraw();
 };
 
@@ -459,50 +466,16 @@ gisportal.TimeLine.prototype.addTimeBar = function(name, id, label, startDate, e
       // redraw is done in zoom
       var data = gisportal.timeline.layerbars[0];
       gisportal.timeline.zoomDate(data.startDate, data.endDate);
+      //Fix
       gisportal.timeline.setDate(data.endDate);
-      // Already redraws within zoom - this.redraw();
+      
    }  
    
    this.reHeight();
    this.redraw(); 
+   this.updatePickerBounds();
 };
 
-gisportal.TimeLine.prototype.addRangeBar = function(name, callback) {
-   var newRangebar = {};
-   newRangebar.name = gisportal.utils.uniqueID();
-   newRangebar.label = name;
-   newRangebar.callback = callback;
-   newRangebar.type = 'range';
-   newRangebar.dateTimes = [];
-   newRangebar.selectedStart = 0;
-   newRangebar.selectedEnd = 0;
-   newRangebar.y = ''; // So that the y can be specifically set to avoid bugs and complications with other types of timebars
-   newRangebar.isDragging = false; // Each bar needs to know if it is being modified so that it doesn't draw over over bars
-   newRangebar.colour = '';
-   this.timebars.push(newRangebar);
-   
-   this.reHeight();
-   this.redraw(); 
-
-};
-
-// NOTE: There may be problems with duplicated unique IDs
-gisportal.TimeLine.prototype.addRangeBarCopy = function(rangebar)  {
-   if (rangebar.selectedEnd) rangebar.selectedEnd = new Date(rangebar.selectedEnd);
-   if (rangebar.selectedStart) rangebar.selectedStart = new Date(rangebar.selectedStart);
-
-   this.timebars.push(rangebar);
-
-   this.reHeight();
-   this.redraw();
-}
-
-// Rename timebar
-gisportal.TimeLine.prototype.rename = function(name, label)  {
-   this.timebars.filter(function(d) { return d.name == name; })[0].label = label;
-   this.reHeight();
-   this.redraw();
-}
 
 gisportal.TimeLine.prototype.has = function(name)  {
    var has = _.where(gisportal.timeline.timebars, function(d)  {
@@ -554,6 +527,7 @@ gisportal.TimeLine.prototype.removeTimeBarByName = function(name) {
    this.timebars = temp;
    this.reHeight();
    this.redraw();
+   this.updatePickerBounds();
 };
 
 // Set the currently selected date and animated the transition
@@ -572,12 +546,32 @@ gisportal.TimeLine.prototype.setDate = function(date) {
 };
 
 gisportal.TimeLine.prototype.showDate = function(date) {
-   var d = date.toDateString().substring(4);
-   $('.js-current-date').html(d);
+   var current = $('.js-current-date').data('date');
+   if( !current || new Date(date).getTime() != current.getTime() )
+      $('.js-current-date').data('date', date).pikaday( 'setDate', date );
 }
 
 // Get the currently selected date 
 gisportal.TimeLine.prototype.getDate = function() {
    var selectedDate = new Date(this.selectedDate);
    return ((selectedDate instanceof Date) ? selectedDate : null);
+};
+
+
+
+// Get the currently selected date 
+gisportal.TimeLine.prototype.updatePickerBounds = function() {
+   var dates = this.timebars.map(function( bar ){
+      return [
+         bar.startDate,
+         bar.endDate,
+      ];
+   }).reduce(function(d1,d2){ return d1.concat(d2) },[]);
+
+   var extent = d3.extent( dates );
+
+   $('.js-current-date')
+      .pikaday( 'setMinDate', extent[0] )
+      .pikaday( 'setMaxDate', extent[1] );
+
 };

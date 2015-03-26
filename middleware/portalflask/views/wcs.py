@@ -30,8 +30,6 @@ def getWcsData():
 
    params = getParams() # Gets any parameters
    params = checkParams(params) # Checks what parameters where entered
-   import pprint
-   current_app.logger.debug(pprint.pprint(params))
    params['url'] = createURL(params)
    current_app.logger.debug('Processing request...') # DEBUG
    current_app.logger.debug(params['url'].value)
@@ -52,7 +50,7 @@ def getWcsData():
       else:
          if 'polygon' in params :
             output = getIrregularData(params)
-         if 'line' in params:
+         elif 'line' in params:
             output = getIrregularData(params, poly_type='line')
          else:
             output = getBboxData(params, basic)
@@ -109,18 +107,29 @@ def getWcsData():
    return outputData
 
 
+@portal_wcs.route('/download_check', methods=["get"])
+def download_check():
+
+   ret = {
+   "size" : "4GB",
+   "format" : "NetCDF"
+   }
+
+   return jsonify(ret)
+
 @portal_wcs.route('/download', methods=["get"])
 def download_netcdf():
    params = getParams() # Gets any parameters
    params = checkParams(params) # Checks what parameters where entered
-   import pprint
-   current_app.logger.debug(pprint.pprint(params))
    params['url'] = createURL(params)
    polygon = params['bbox'].value
-   if 'line' in params:
-      masked, data, mask, tfile, variable  = create_mask(polygon, params, poly_type='line')
-   else: 
-      masked, data, mask, tfile, variable = create_mask(polygon, params)
+   try:
+      if 'line' in params:
+         masked, data, mask, tfile, variable  = create_mask(polygon, params, poly_type='line')
+      else: 
+         masked, data, mask, tfile, variable = create_mask(polygon, params)
+   except Exception as e:
+      return abort(400)
    #current_app.logger.debug('------------------------------------------------------------~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-------------------------------');
    #current_app.logger.debug(type(data))
    #current_app.logger.debug(type(mask))
@@ -136,7 +145,7 @@ def download_netcdf():
       data.variables[variable][x] = masked[x][::]
    #original_file.variables['chlor_a']= masked_chl[:][::]
    data.close()
-   return send_file(tfile, mimetype='application/x-netcdf')
+   return send_file(tfile, mimetype='application/x-netcdf', as_attachment=True, attachment_filename="download.nc")
 
 """
 Gets any parameters.
@@ -229,6 +238,8 @@ def create_mask(poly, params, poly_type="polygon"):
    wcs_envelope = loaded_poly.envelope
    bounds =  wcs_envelope.bounds
    bb = ','.join(map(str,bounds))
+   current_app.logger.debug('testing polygon for strangeness')
+   current_app.logger.debug('bound = %s' % bb)
    params['bbox']._value = bb
    params['url'] = createURL(params)
    variable = params['coverage'].value
@@ -252,31 +263,76 @@ def create_mask(poly, params, poly_type="polygon"):
    latvals = to_be_masked.variables[str(getCoordinateVariable(to_be_masked, 'Lat').dimensions[0])][:]
    lonvals = to_be_masked.variables[str(getCoordinateVariable(to_be_masked, 'Lon').dimensions[0])][:]
 
+   from shapely.geometry import Polygon
+   minlat = min(latvals)
+   maxlat = max(latvals)
+   minlon = min(lonvals)
+   maxlon = max(lonvals)
+
+   lonlat_poly = Polygon([[minlon,maxlat],[maxlon,maxlat],[maxlon,minlat],[minlon,minlat],[minlon,maxlat]])
+   #print '#'*50
+   #print lonlat_poly
+   overlap_poly = loaded_poly.intersection(lonlat_poly)
    poly = poly[trim_sizes[poly_type]]
-   print poly
+
    poly = poly.split(',')
    poly = [x.split() for x in poly]
 
-   found_lats = [find_closest(latvals, float(x[1])) for x in poly]
-   found_lons = [find_closest(lonvals, float(x[0])) for x in poly]
 
-   found = zip(found_lons,found_lats)
+
+   #found_lats = [find_closest(latvals, float(x[1])) for x in poly]
+   #found_lons = [find_closest(lonvals, float(x[0])) for x in poly]
+   if overlap_poly.type == "MultiPolygon":
+      found = []
+      for poly in overlap_poly:
+         found_lats = [find_closest(latvals, float(x)) for x in poly.exterior.xy[1]]
+         found_lons = [find_closest(lonvals, float(x)) for x in poly.exterior.xy[0]]
+         found.append(zip(found_lons,found_lats))
+
+
+   elif overlap_poly.type == "MultiLineString":
+      found = []
+      for poly in overlap_poly:
+         found_lats = [find_closest(latvals, float(x)) for x in poly.xy[1]]
+         found_lons = [find_closest(lonvals, float(x)) for x in poly.xy[0]]
+         found.append(zip(found_lons,found_lats))
+
+   else:
+      if poly_type is 'line':
+         found_lats = [find_closest(latvals, float(x)) for x in overlap_poly.xy[1]]
+         found_lons = [find_closest(lonvals, float(x)) for x in overlap_poly.xy[0]]
+      else:
+         found_lats = [find_closest(latvals, float(x)) for x in overlap_poly.exterior.xy[1]]
+         found_lons = [find_closest(lonvals, float(x)) for x in overlap_poly.exterior.xy[0]]
+
+      #found = zip(overlap_poly.exterior.xy[0],overlap_poly.exterior.xy[1])
+      found = zip(found_lons,found_lats)
+   current_app.logger.debug('#'*40)
+   current_app.logger.debug(found)
+
    # img = Image.new('L', (chl.shape[2],chl.shape[1]), 0)
    img = Image.new('L', (chl.shape[to_be_masked.variables[variable].dimensions.index(str(getCoordinateVariable(to_be_masked, 'Lon').dimensions[0]))],chl.shape[to_be_masked.variables[variable].dimensions.index(str(getCoordinateVariable(to_be_masked, 'Lat').dimensions[0]))]), 0)
 
-   if poly_type == 'polygon':
-      ImageDraw.Draw(img).polygon(found,  outline=2, fill=2)
-   if poly_type == 'line':
-      ImageDraw.Draw(img).line(found,   fill=2)
+   if overlap_poly.type == "MultiPolygon":
+      for f in found:
+         ImageDraw.Draw(img).polygon(f,  outline=2, fill=2)
+   elif overlap_poly.type == "MultiLineString":
+      for f in found:
+         ImageDraw.Draw(img).polygon(f,  outline=2, fill=2)
+   else:
+      if poly_type == 'polygon':
+         ImageDraw.Draw(img).polygon(found,  outline=2, fill=2)
+      if poly_type == 'line':
+         ImageDraw.Draw(img).line(found,   fill=2)
 
    masker = np.array(img)
+
    #fig = plt.figure()
    masked_variable = []
    for i in range(chl.shape[0]):
       #print i
       masked_variable.append(np.ma.masked_array(chl[i,:], mask=[x != 2 for x in masker]))
       masked_variable[i].filled(-999)
-    
    #    a = fig.add_subplot(1,5,i+1)
    #    imgplot = plt.imshow(masked_variable)
 
@@ -442,12 +498,14 @@ def getBboxData(params, method):
             ## On the first attempt, it may return a 400 due to vertical attribute in data
             ## The second try removes the negative to attempt to fix.
             try:
-               current_app.logger.debug(params["vertical"].value)
-               params["vertical"]._value = params["vertical"].value[1:]
-               params['url'] = createURL(params)
-               datavar = getData(params, method)
-               current_app.logger.debug(datavar)
-               return datavar
+               if "vertical" in params:
+                  current_app.logger.debug(params["vertical"].value)
+                  params["vertical"]._value = params["vertical"].value[1:]
+                  params['url'] = createURL(params)
+                  datavar = getData(params, method)
+                  current_app.logger.debug(datavar)
+                  return datavar
+
 
             except urllib2.URLError as e:
                if hasattr(e, 'code'): # check for the code attribute from urllib2.urlopen
@@ -472,15 +530,19 @@ def getBboxData(params, method):
 """
 Performs a basic set of statistical functions on the provided data.
 """
-def basic(dataset, params, irregular=None, original=None):
+def basic(dataset, params, irregular=False, original=None):
    if irregular:
-      arr = dataset
+      arr = np.ma.concatenate(dataset)
    else:
       arr = np.array(dataset.variables[params['coverage'].value])
+   #current_app.logger.debug(arr)
    # Create a masked array ignoring nan's
    if original is not None:
       dataset = original
-   maskedArray = np.ma.masked_array(arr, [np.isnan(x) for x in arr])
+   
+   maskedArray = np.ma.masked_invalid(arr)
+   #maskedArray = arr
+   
    time = getCoordinateVariable(dataset, 'Time')
       
    if time == None:
@@ -521,7 +583,7 @@ def basic(dataset, params, irregular=None, original=None):
    output['data'] = {}
    
    for i, row in enumerate(maskedArray):
-      #current_app.logger.debug(row)
+
       if timeUnits:
          date = netCDF.num2date(time[i], time.units, calendar='standard').isoformat()
       else:     
@@ -636,10 +698,8 @@ def hovmoller(dataset, params):
          
          mean = getMean(row)
          
-         if np.isnan(mean):
-            mean = 0
-
-         output['data'].append([date, float(pos), mean])
+         if not np.isnan(mean):
+            output['data'].append([date, float(pos), mean])
             
    if len(output['data']) < 1:
       g.graphError = "no valid data available to use"
@@ -743,9 +803,9 @@ time dimension will not always have the same name or the same attributes.
 def getCoordinateVariable(dataset, axis):
    for i, key in enumerate(dataset.variables):
       var = dataset.variables[key]
-      current_app.logger.debug("========== key:" + key + " ===========") # DEBUG
+      #current_app.logger.debug("========== key:" + key + " ===========") # DEBUG
       for name in var.ncattrs():
-         current_app.logger.debug(name) # DEBUG
+         #current_app.logger.debug(name) # DEBUG
          if name == "_CoordinateAxisType" and var._CoordinateAxisType == axis:
             return var
    

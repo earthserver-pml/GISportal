@@ -4,18 +4,28 @@
 
 .panel  {
   position: absolute;
-  display: flex;
-  flex-direction: column;
   top: 25px;
   bottom: 125px;
   left: 25px;
-  /*height: 95%;*/
-  /*overflow: hidden;*/
+
   min-width: 290px;
-  width: 33.3%;
+  width: 25%;
   max-width: 500px;
   user-select: none;
+  box-shadow: 0px 0px 11px -2px black;
+  
+  padding-top: 45px;
+  padding-bottom: 39px;
 }
+
+.panel-header,
+.panel-footer,
+.panel-container{
+	z-index: 10;
+}
+
+
+
 
 .panel-header,
 .panel-footer  {
@@ -28,6 +38,10 @@
   border-bottom: 2px solid #EFEDF3;
   box-shadow: 0px 1px 5px -2px #000000;
   z-index: 42;
+  overflow: hidden;
+  position: absolute;
+  width: 100%;
+  top: 0px;
 }
 
 .panel-header .tab{
@@ -35,7 +49,7 @@
     display: inline;
     border-bottom: 0px;
     
-    margin: 7px 7px 0px 7px;
+    margin: 7px 4px 0px 4px;
     padding: 8px 8px 9px 8px;
     
     background-color: #32253f;
@@ -48,6 +62,10 @@
     color: black;
 }
 
+.panel-header .tab [class^="icon-"]{
+  font-size: 17px;
+  line-height: 19px;
+}
 
 
 .panel-header .panel-icon-tab{
@@ -57,12 +75,14 @@
 }
 
 .panel-footer  {
-  padding: 10px 9px 18 9px;
   box-shadow: 0px -1px 5px -2px #000000;
   z-index: 42;
   text-align: right;
   color: white;
   padding: 3px;
+  position: absolute;
+  width: 100%;
+  bottom: 0px;
 }
 
 .panel-container  {
@@ -90,6 +110,7 @@
 .icon-btn{
 	color: white;
 	opacity: 0.5;
+  cursor: pointer;
 }
 .icon-btn:hover{
 	opacity: 0.8;
@@ -140,8 +161,9 @@
   border-bottom: 1px solid #e0dce4;
   border-top: 1px solid transparent;
   display: inline-block;
-  min-height: 40px;
+  padding: 5px;
   width: 50%;
+  cursor: pointer;
 }
 
 .panel-tab-name.browse-tabs  {
@@ -195,6 +217,7 @@
 
 .panel-list li  {
   background-color: #ffffff;
+  position: relative;
 }
 
 
@@ -263,6 +286,7 @@ select,
   text-transform: capitalize;
   margin-top: 9px;
   width: 100%;
+  height: 35px;
 }
 
 /* Firefox has a weird padding problem */
@@ -273,11 +297,8 @@ select,
    }
 }
 
-/* I'm using a hack for multiple select
- * so overriding the height breaks
- * the hack. */
-#indicatorsPanel select  {
-  height: 35px;
+#indicatorsPanel{
+  position: relative;
 }
 
 .indicator-select .icon_arrow  {
@@ -292,8 +313,28 @@ select,
 }
 
 .fake-select li{
-  padding-left: 45px;
+  padding: 3px 10px 3px 28px;
+}
 
+.indicator-checkbox-text{
+  display: inline-block;
+  vertical-align: middle;
+  width: calc(100% - 26px); 
+}
+
+.indicator-checkbox{
+
+  text-transform: capitalize;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+
+.fake-select .more-info{
+  position: absolute;
+  left: 7px;
+  font-size: 15px;
+  top: 13px;
 }
 
 .panel-list .text-button {
@@ -309,8 +350,8 @@ select,
   padding-left: 15px;
 }
 
-.search-results p  {
-   text-transform: capitalize; 
+.search-results li  {
+  padding-right: 1px;
 }
 
 /* Hide select so that mobile gets mobile version
@@ -329,7 +370,7 @@ input.search  {
    height: 45px;
    padding: 5px;
    padding-left: 10px;
-   margin: 0 10px; 
+   margin: 0 7px 0 13px;
    width: calc(100% - 20px);
 }
 
@@ -366,3 +407,17 @@ input.search  {
   padding: 9px;
 }
 
+.about-button {
+  float:left;
+}
+
+.download-text {
+  text-align:justify;
+  padding: 10px;
+  margin-bottom: 15px;
+  background: #fbfafb;
+}
+
+.download-text p {
+
+}
